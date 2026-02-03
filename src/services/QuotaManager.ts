@@ -1,5 +1,7 @@
 import Database from "better-sqlite3";
 
+export const QUOTA_RESET_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export class QuotaManager {
     private db: Database.Database;
     private readonly limit: number;
@@ -27,7 +29,7 @@ export class QuotaManager {
         if (!row) return true;
 
         // Reset if 24 hours passed (86400000 ms)
-        if (now - row.last_reset > 86400000) {
+        if (now - row.last_reset > QUOTA_RESET_INTERVAL_MS) {
             this.db.prepare("UPDATE quotas SET count = 0, last_reset = ? WHERE address = ?").run(now, address);
             return true;
         }
