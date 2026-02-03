@@ -17,7 +17,8 @@ describe("RelayerService", () => {
     beforeEach(() => {
         mockProvider = {
             sendTransaction: async (tx: any) => "mock-tx-hash",
-            queryContract: vi.fn().mockResolvedValue({ returnData: ["base64EncodedData"] })
+            queryContract: vi.fn().mockResolvedValue({ returnData: ["base64EncodedData"] }),
+            doPostGeneric: vi.fn().mockResolvedValue({ data: { data: { returnData: ["base64EncodedData"] } } })
         } as unknown as ProxyNetworkProvider;
 
         const mnemonic = Mnemonic.generate();
@@ -109,7 +110,7 @@ describe("RelayerService", () => {
             gasLimit: 50000n,
             chainID: "D",
             version: 1,
-            data: Buffer.from("registerAgent@name")
+            data: Buffer.from("register_agent@name")
         });
         const computer = new TransactionComputer();
         const signature = await signer.sign(computer.computeBytesForSigning(tx));

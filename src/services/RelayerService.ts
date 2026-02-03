@@ -46,14 +46,16 @@ export class RelayerService {
 
         const identityRegistry = this.registryAddresses[0]; // Assume first is Identity
         try {
-            const query = {
-                scAddress: Address.newFromBech32(identityRegistry),
-                func: "getAgentId",
-                args: [address.toHex()]
+            // Use the doPostGeneric pattern for VM queries
+            const vmQueryUrl = "/vm-values/query";
+            const queryPayload = {
+                scAddress: identityRegistry,
+                funcName: "get_agent_id",
+                args: [Buffer.from(address.getPublicKey()).toString("hex")]
             };
 
-            const queryResponse = await this.provider.queryContract(query);
-            return queryResponse.returnData && queryResponse.returnData.length > 0;
+            const queryResponse = await (this.provider as any).doPostGeneric(vmQueryUrl, queryPayload);
+            return queryResponse?.data?.data?.returnData && queryResponse.data.data.returnData.length > 0;
         } catch (error) {
             console.error("Agent registration check failed:", error);
             return false;
@@ -72,7 +74,7 @@ export class RelayerService {
 
         // 2. Security Whitelist & Logic
         const isTargetingRegistry = this.registryAddresses.includes(receiver);
-        const isRegistration = data.startsWith("registerAgent");
+        const isRegistration = data.startsWith("register_agent");
 
         if (isRegistration) {
             // New bot: must solve challenge
