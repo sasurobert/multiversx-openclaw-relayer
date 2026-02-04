@@ -110,7 +110,7 @@ describe("RelayerService", () => {
             gasLimit: 50000n,
             chainID: "D",
             version: 1,
-            data: Buffer.from("register_agent@name")
+            data: Buffer.from("register_agent@6e616d65@68747470733a2f2f6578616d706c652e636f6d@7075626b6579") // name@uri@pk
         });
         const computer = new TransactionComputer();
         const signature = await signer.sign(computer.computeBytesForSigning(tx));
