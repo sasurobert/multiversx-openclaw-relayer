@@ -1,18 +1,24 @@
-import { Transaction, Address, TransactionComputer, INetworkProvider, ContractQuery, ContractFunction } from "@multiversx/sdk-core";
+import { Transaction, Address, TransactionComputer, SmartContractQuery, ContractFunction, AddressValue } from "@multiversx/sdk-core";
 import { UserVerifier, UserSigner, UserPublicKey } from "@multiversx/sdk-wallet";
 import { QuotaManager } from "./QuotaManager";
 import { ChallengeManager } from "./ChallengeManager";
 import { RelayerAddressManager } from "./RelayerAddressManager";
 
+export interface IRelayerNetworkProvider {
+    queryContract(query: SmartContractQuery): Promise<any>;
+    sendTransaction(tx: Transaction): Promise<string>;
+    simulateTransaction(tx: Transaction): Promise<any>;
+}
+
 export class RelayerService {
-    private provider: INetworkProvider;
+    private provider: IRelayerNetworkProvider;
     private relayerAddressManager: RelayerAddressManager;
     private quotaManager: QuotaManager;
     private challengeManager: ChallengeManager;
     private registryAddresses: string[];
 
     constructor(
-        provider: INetworkProvider,
+        provider: IRelayerNetworkProvider,
         relayerAddressManager: RelayerAddressManager,
         quotaManager: QuotaManager,
         challengeManager: ChallengeManager,
@@ -49,13 +55,12 @@ export class RelayerService {
         if (this.registryAddresses.length === 0) return true; // Fail open if misconfigured
 
         // 1. Check On-Chain Registry
-        // 1. Check On-Chain Registry
         const identityRegistry = this.registryAddresses[0];
         try {
-            const query = new ContractQuery({
-                address: new Address(identityRegistry),
-                func: new ContractFunction("get_agent_id"),
-                args: [new Address(address.toBech32())]
+            const query = new SmartContractQuery({
+                contract: new Address(identityRegistry),
+                function: "get_agent_id",
+                arguments: [new Address(address.toBech32()).getPublicKey()]
             });
 
             const queryResponse = await this.provider.queryContract(query);
@@ -70,8 +75,6 @@ export class RelayerService {
         // 2. Fallback: Check if challenge was solved (for registration flow)
         // This is handled by the caller checking the challengeNonce usually, 
         // but if we want "isAuthorized" to mean "can relay", we need to know the context.
-        // Actually, the previous logic separated "isRegistration" vs "isTargetingRegistry".
-        // Let's keep the context-aware check in signAndRelay, but use this helper for the "Registry" part.
         return false;
     }
 
@@ -98,12 +101,6 @@ export class RelayerService {
             if (!challengeNonce || !this.challengeManager.verifySolution(sender.toBech32(), challengeNonce)) {
                 throw new Error("Unauthorized: Agent not registered. Solve challenge and register first.");
             }
-
-            // Optional: Enforce that they are actually calling 'register_agent'?
-            // The user implication is "handshake one time only". 
-            // If they solve the challenge, we allow this specific transaction.
-            // If it's a registration tx, good. If it's something else, they waste a challenge but it's "authorized" by PoW.
-            // Let's stick to allowing it if challenge is solved.
         }
 
         // 3. Signature Validation

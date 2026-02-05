@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { RelayerService } from "../src/services/RelayerService";
-import { Transaction, Address, TransactionComputer, ContractQuery } from "@multiversx/sdk-core";
+import { RelayerService, IRelayerNetworkProvider } from "../src/services/RelayerService";
+import { Transaction, Address, TransactionComputer, SmartContractQuery } from "@multiversx/sdk-core";
 import { UserSigner, Mnemonic } from "@multiversx/sdk-wallet";
-import { ProxyNetworkProvider } from "@multiversx/sdk-network-providers";
 import { QuotaManager } from "../src/services/QuotaManager";
 import { ChallengeManager } from "../src/services/ChallengeManager";
 import { RelayerAddressManager } from "../src/services/RelayerAddressManager";
@@ -11,7 +10,7 @@ vi.mock("@multiversx/sdk-core", async (importOriginal) => {
     const mod = await importOriginal<typeof import("@multiversx/sdk-core")>();
     return {
         ...mod,
-        ContractQuery: class MockContractQuery {
+        SmartContractQuery: class MockSmartContractQuery {
             constructor(args: any) { Object.assign(this, args); }
         },
         ContractFunction: class MockContractFunction {
@@ -24,7 +23,7 @@ describe("RelayerService", () => {
     let relayer: RelayerService;
     let quotaManager: QuotaManager;
     let challengeManager: ChallengeManager;
-    let mockProvider: ProxyNetworkProvider;
+    let mockProvider: IRelayerNetworkProvider;
     let mockRelayerAddressManager: RelayerAddressManager; // Mock
     let relayerSigner: UserSigner;
     const REGISTRY_ADDR = "erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu";
@@ -34,8 +33,7 @@ describe("RelayerService", () => {
             sendTransaction: async (tx: any) => "mock-tx-hash",
             simulateTransaction: vi.fn().mockResolvedValue({ execution: { result: "success" } }),
             queryContract: vi.fn().mockResolvedValue({ returnData: ["base64EncodedData"] }),
-            doPostGeneric: vi.fn().mockResolvedValue({ data: { data: { returnData: ["base64EncodedData"] } } })
-        } as unknown as ProxyNetworkProvider;
+        };
 
         const mnemonic = Mnemonic.generate();
         relayerSigner = new UserSigner(mnemonic.deriveKey(0));
