@@ -19,6 +19,7 @@ describe("RelayerService", () => {
     beforeEach(() => {
         mockProvider = {
             sendTransaction: async (tx: any) => "mock-tx-hash",
+            simulateTransaction: vi.fn().mockResolvedValue({ execution: { result: "success" } }),
             queryContract: vi.fn().mockResolvedValue({ returnData: ["base64EncodedData"] }),
             doPostGeneric: vi.fn().mockResolvedValue({ data: { data: { returnData: ["base64EncodedData"] } } })
         } as unknown as ProxyNetworkProvider;

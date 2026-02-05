@@ -115,7 +115,19 @@ export class RelayerService {
         const computer = new TransactionComputer();
         tx.relayerSignature = await relayerSigner.sign(computer.computeBytesForSigning(tx));
 
-        // 5. Broadcast
+        // 5. Pre-broadcast Simulation (Crucial for Relayed V3)
+        try {
+            const simulationResult = await this.provider.simulateTransaction(tx);
+            if (simulationResult?.execution?.result !== 'success') {
+                const msg = simulationResult?.execution?.message || 'Simulation failed';
+                throw new Error(`On-chain simulation failed: ${msg}`);
+            }
+        } catch (simError: any) {
+            console.error("Simulation failed:", simError);
+            throw new Error(`Simulation error: ${simError.message}`);
+        }
+
+        // 6. Broadcast
         try {
             const hash = await this.provider.sendTransaction(tx);
             this.quotaManager.incrementUsage(sender.toBech32());
