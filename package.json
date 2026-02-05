@@ -5,6 +5,9 @@
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest",
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "fix": "gts fix",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -27,6 +30,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.2.0",
     "@types/supertest": "^6.0.3",
+    "gts": "^7.0.0",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
