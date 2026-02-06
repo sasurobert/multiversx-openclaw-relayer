@@ -3,11 +3,15 @@ import {
     Address,
     TransactionComputer,
     SmartContractQuery,
+    AbiRegistry,
+    ArgSerializer,
 } from '@multiversx/sdk-core';
 import { UserVerifier, UserPublicKey } from '@multiversx/sdk-wallet';
 import { QuotaManager } from './QuotaManager';
 import { ChallengeManager } from './ChallengeManager';
 import { RelayerAddressManager } from './RelayerAddressManager';
+import fs from 'fs';
+import path from 'path';
 
 export interface ISimulationResult {
     status?: {
@@ -43,6 +47,7 @@ export class RelayerService {
     private quotaManager: QuotaManager;
     private challengeManager: ChallengeManager;
     private registryAddresses: string[];
+    private identityAbi?: AbiRegistry;
 
     constructor(
         provider: IRelayerNetworkProvider,
@@ -56,6 +61,19 @@ export class RelayerService {
         this.quotaManager = quotaManager;
         this.challengeManager = challengeManager;
         this.registryAddresses = registryAddresses;
+
+        this.initializeAbis();
+    }
+
+    private initializeAbis() {
+        try {
+            const abiPath = path.join(__dirname, '../abis/identity-registry.abi.json');
+            if (fs.existsSync(abiPath)) {
+                this.identityAbi = AbiRegistry.create(JSON.parse(fs.readFileSync(abiPath, 'utf8')));
+            }
+        } catch (error) {
+            console.error('Failed to initialize ABIs in RelayerService:', error);
+        }
     }
 
     public getRelayerAddressForUser(userAddress: string): string {
@@ -98,23 +116,24 @@ export class RelayerService {
 
             const queryResponse = await this.provider.queryContract(query);
 
-            // Robust check for returnData vs returnDataParts
-            const returnData =
-                queryResponse.returnData || queryResponse.returnDataParts;
+            if (this.identityAbi) {
+                const serializer = new ArgSerializer();
+                const values = serializer.buffersToValues(queryResponse.returnDataParts.map((p: any) => Buffer.from(p)), this.identityAbi.getEndpoint('get_agent_id').output);
+                const agentId = values[0]?.valueOf() || 0n;
+                console.log(`Authorization: Agent ID found (ABI-based): ${agentId.toString()}`);
+                return agentId > 0n;
+            }
 
+            // Fallback to legacy parsing if ABI is missing
+            const returnData = queryResponse.returnData || queryResponse.returnDataParts;
             if (!returnData || returnData.length === 0) {
-                console.log(
-                    `Authorization: Registry returned no data for ${address.toBech32()}`,
-                );
+                console.log(`Authorization: Registry returned no data for ${address.toBech32()}`);
                 return false;
             }
 
-            // Decode the result. EIP-8004/MX-8004 returns u64 for agent_id.
-            // 0 means not registered.
             const raw = Buffer.from(returnData[0], 'base64');
             const agentId = raw.length > 0 ? BigInt('0x' + raw.toString('hex')) : 0n;
-
-            console.log(`Authorization: Agent ID found: ${agentId.toString()}`);
+            console.log(`Authorization: Agent ID found (legacy): ${agentId.toString()}`);
             return agentId > 0n;
         } catch (error) {
             console.error('Authorization: Agent registration check failed:', error);

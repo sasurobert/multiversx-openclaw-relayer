@@ -51,7 +51,10 @@ describe('RelayerService', () => {
                 }),
             queryContract: vi
                 .fn()
-                .mockResolvedValue({ returnData: ['base64EncodedData'] }),
+                .mockResolvedValue({
+                    returnData: [Buffer.from('0000000000000001', 'hex').toString('base64')],
+                    returnDataParts: [Buffer.from('0000000000000001', 'hex')]
+                }),
         };
 
         const mnemonic = Mnemonic.generate();
