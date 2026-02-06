@@ -32,7 +32,7 @@ export interface ISimulationResult {
 }
 
 export interface IRelayerNetworkProvider {
-    queryContract(query: SmartContractQuery): Promise<any>;
+    queryContract(query: SmartContractQuery): Promise<any>; // Query results vary wildly, keeping any for now but could be improved with generic
     sendTransaction(tx: Transaction): Promise<string>;
     simulateTransaction(tx: Transaction): Promise<ISimulationResult>;
 }
@@ -79,30 +79,48 @@ export class RelayerService {
     }
 
     async isAuthorized(address: Address): Promise<boolean> {
-        if (this.registryAddresses.length === 0) return true; // Fail open if misconfigured
+        if (this.registryAddresses.length === 0) {
+            console.log('Authorization: No registries configured, failing open.');
+            return true;
+        }
 
-        // 1. Check On-Chain Registry
         const identityRegistry = this.registryAddresses[0];
+        console.log(
+            `Authorization: Checking registry ${identityRegistry} for ${address.toBech32()}`,
+        );
+
         try {
             const query = new SmartContractQuery({
                 contract: new Address(identityRegistry),
                 function: 'get_agent_id',
-                arguments: [new Address(address.toBech32()).getPublicKey()],
+                arguments: [address.getPublicKey()],
             });
 
             const queryResponse = await this.provider.queryContract(query);
-            const returnData = queryResponse.returnData;
-            const isRegistered = returnData && returnData.length > 0;
 
-            if (isRegistered) return true;
+            // Robust check for returnData vs returnDataParts
+            const returnData =
+                queryResponse.returnData || queryResponse.returnDataParts;
+
+            if (!returnData || returnData.length === 0) {
+                console.log(
+                    `Authorization: Registry returned no data for ${address.toBech32()}`,
+                );
+                return false;
+            }
+
+            // Decode the result. EIP-8004/MX-8004 returns u64 for agent_id.
+            // 0 means not registered.
+            const raw = Buffer.from(returnData[0], 'base64');
+            const agentId =
+                raw.length > 0 ? parseInt(raw.toString('hex'), 16) : 0;
+
+            console.log(`Authorization: Agent ID found: ${agentId}`);
+            return agentId > 0;
         } catch (error) {
-            console.error('Agent registration check failed:', error);
+            console.error('Authorization: Agent registration check failed:', error);
+            return false;
         }
-
-        // 2. Fallback: Check if challenge was solved (for registration flow)
-        // This is handled by the caller checking the challengeNonce usually,
-        // but if we want "isAuthorized" to mean "can relay", we need to know the context.
-        return false;
     }
 
     async signAndRelay(
@@ -110,30 +128,34 @@ export class RelayerService {
         challengeNonce?: string,
     ): Promise<string> {
         const sender = tx.sender;
+        console.log(`Relay: Processing transaction from ${sender.toBech32()}`);
 
         // 1. Quota Check
         if (!this.quotaManager.checkLimit(sender.toBech32())) {
+            console.warn(`Relay: Quota exceeded for ${sender.toBech32()}`);
             throw new Error('Quota exceeded for this agent');
         }
 
         // 2. Authorization Logic
-        // Case A: Agent is already registered on-chain -> Always Authorized
+        console.log('Relay: Step 1 - Checking Authorization');
         const isRegistered = await this.isAuthorized(sender);
 
         if (isRegistered) {
-            // Authorized. Proceed.
-        }
-        // Case B: New Agent solving challenge -> Authorized ONLY for registration
-        else {
-            // If not registered, they MUST solve a challenge AND must be trying to register.
+            console.log('Relay: Agent is registered on-chain.');
+        } else {
+            console.log(
+                'Relay: Agent NOT registered. Verifying challenge solution.',
+            );
             if (
                 !challengeNonce ||
                 !this.challengeManager.verifySolution(sender.toBech32(), challengeNonce)
             ) {
+                console.warn(`Relay: Unauthorized attempt by ${sender.toBech32()}`);
                 throw new Error(
                     'Unauthorized: Agent not registered. Solve challenge and register first.',
                 );
             }
+            console.log('Relay: Challenge solution verified.');
         }
 
         // 3. Signature Validation
@@ -167,8 +189,13 @@ export class RelayerService {
         );
 
         // 5. Pre-broadcast Simulation (Crucial for Relayed V3)
+        console.log('Relay: Step 4 - Running On-Chain Simulation');
         try {
             const simulationResult = await this.provider.simulateTransaction(tx);
+            console.log(
+                'Relay: Simulation raw result:',
+                JSON.stringify(simulationResult),
+            );
 
             // Robust Parser: Handle both flattened (API) and nested (Proxy/Gateway) structures
             const statusFromStatus = simulationResult?.status?.status;
@@ -181,21 +208,27 @@ export class RelayerService {
             if (resultStatus !== 'success') {
                 const message =
                     execution?.message || simulationResult?.error || 'Unknown error';
+                console.error(`Relay: Simulation failed: ${message}`);
                 throw new Error(`On-chain simulation failed: ${message}`);
             }
-        } catch (simError: any) {
-            console.error('Simulation failed:', simError);
-            throw new Error(`Simulation error: ${simError.message}`);
+            console.log('Relay: Simulation successful.');
+        } catch (simError: unknown) {
+            const message = simError instanceof Error ? simError.message : String(simError);
+            console.error('Relay: Simulation error caught:', message);
+            throw simError;
         }
 
         // 6. Broadcast
+        console.log('Relay: Step 5 - Broadcasting Transaction');
         try {
             const hash = await this.provider.sendTransaction(tx);
             this.quotaManager.incrementUsage(sender.toBech32());
+            console.log(`Relay: Successful broadcast. Hash: ${hash}`);
             return hash;
-        } catch (error: any) {
-            console.error('Broadcast failed:', error);
-            throw new Error(`Broadcast failed: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error('Relay: Broadcast failed:', message);
+            throw new Error(`Broadcast failed: ${message}`);
         }
     }
 }

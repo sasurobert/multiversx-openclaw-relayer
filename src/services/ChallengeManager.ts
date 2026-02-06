@@ -51,9 +51,13 @@ export class ChallengeManager {
     const hash = createHash('sha256').update(data).digest(); // Get Buffer for bit checking
 
     if (!this.checkDifficulty(hash, challenge.difficulty)) {
+      console.warn(
+        `Challenge: Invalid solution for ${address}. Hash: ${hash.toString('hex')}`,
+      );
       return false;
     }
 
+    console.log(`Challenge: Valid solution for ${address}.`);
     this.challenges.delete(address); // One-time use
     return true;
   }
