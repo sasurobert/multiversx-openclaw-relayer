@@ -3,6 +3,7 @@ import {
     Address,
     TransactionComputer,
     SmartContractQuery,
+    SmartContractQueryResponse,
     AbiRegistry,
     ArgSerializer,
 } from '@multiversx/sdk-core';
@@ -38,7 +39,7 @@ export interface ISimulationResult {
 }
 
 export interface IRelayerNetworkProvider {
-    queryContract(query: SmartContractQuery): Promise<any>; // Query results vary wildly, keeping any for now but could be improved with generic
+    queryContract(query: SmartContractQuery): Promise<SmartContractQueryResponse>;
     sendTransaction(tx: Transaction): Promise<string>;
     simulateTransaction(tx: Transaction): Promise<ISimulationResult>;
 }
@@ -127,13 +128,13 @@ export class RelayerService {
             }
 
             // Fallback to legacy parsing if ABI is missing
-            const returnData = queryResponse.returnData || queryResponse.returnDataParts;
+            const returnData = queryResponse.returnDataParts;
             if (!returnData || returnData.length === 0) {
                 console.log(`Authorization: Registry returned no data for ${address.toBech32()}`);
                 return false;
             }
 
-            const raw = Buffer.from(returnData[0], 'base64');
+            const raw = Buffer.from(returnData[0]);
             const agentId = raw.length > 0 ? BigInt('0x' + raw.toString('hex')) : 0n;
             console.log(`Authorization: Agent ID found (legacy): ${agentId.toString()}`);
             return agentId > 0n;
