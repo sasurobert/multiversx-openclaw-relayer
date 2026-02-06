@@ -15,6 +15,8 @@ export interface ISimulationResult {
     };
     raw?: {
         status?: string;
+        receiverShard?: { status?: string };
+        senderShard?: { status?: string };
     };
     execution?: {
         result?: string;
@@ -201,8 +203,14 @@ export class RelayerService {
             const statusFromRaw = simulationResult?.raw?.status;
             const execution =
                 simulationResult?.execution || simulationResult?.result?.execution;
+
+            // Check shard-specific status in raw if top-level status is missing
+            const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
+            const senderShardStatus = simulationResult?.raw?.senderShard?.status;
+            const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
+
             const resultStatus =
-                statusFromStatus || statusFromRaw || execution?.result;
+                statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
 
             if (resultStatus !== 'success') {
                 const message =
