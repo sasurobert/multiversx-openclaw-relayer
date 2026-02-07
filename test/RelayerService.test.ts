@@ -1,4 +1,25 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+const { mockController } = vi.hoisted(() => ({
+    mockController: {
+        query: vi.fn(),
+    }
+}));
+
+vi.mock('@multiversx/sdk-core', async importOriginal => {
+    const mod = await importOriginal<typeof import('@multiversx/sdk-core')>();
+    return {
+        ...mod,
+        Abi: {
+            create: vi.fn().mockReturnValue({}),
+        },
+        DevnetEntrypoint: vi.fn().mockImplementation(() => ({
+            createSmartContractController: vi.fn().mockReturnValue(mockController),
+        })),
+        SmartContractController: vi.fn().mockReturnValue(mockController),
+    };
+});
+
 import {
     RelayerService,
     IRelayerNetworkProvider,
@@ -7,26 +28,12 @@ import {
     Transaction,
     Address,
     TransactionComputer,
+    DevnetEntrypoint,
 } from '@multiversx/sdk-core';
 import { UserSigner, Mnemonic } from '@multiversx/sdk-wallet';
 import { QuotaManager } from '../src/services/QuotaManager';
 import { ChallengeManager } from '../src/services/ChallengeManager';
 import { RelayerAddressManager } from '../src/services/RelayerAddressManager';
-
-vi.mock('@multiversx/sdk-core', async importOriginal => {
-    const mod = await importOriginal<typeof import('@multiversx/sdk-core')>();
-    return {
-        ...mod,
-        SmartContractQuery: class MockSmartContractQuery {
-            constructor(args: any) {
-                Object.assign(this, args);
-            }
-        },
-        ContractFunction: class MockContractFunction {
-            constructor(_name: string) { }
-        },
-    };
-});
 
 describe('RelayerService', () => {
     let relayer: RelayerService;
@@ -73,12 +80,19 @@ describe('RelayerService', () => {
         quotaManager = new QuotaManager(':memory:', 10);
         challengeManager = new ChallengeManager(60, 4); // Low difficulty for tests (4 bits)
 
+        const mockEntrypoint = {
+            createSmartContractController: vi.fn().mockReturnValue(mockController),
+            simulateTransaction: mockProvider.simulateTransaction,
+            sendTransaction: mockProvider.sendTransaction,
+        } as unknown as DevnetEntrypoint;
+
         relayer = new RelayerService(
             mockProvider,
             mockRelayerAddressManager,
             quotaManager,
             challengeManager,
             [REGISTRY_ADDR],
+            mockEntrypoint
         );
     });
 
@@ -108,6 +122,7 @@ describe('RelayerService', () => {
         const sender = Address.newFromBech32(
             'erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu',
         );
+        mockController.query.mockResolvedValue([1n]);
         await expect(relayer.isAuthorized(sender)).resolves.toBe(true);
     });
 
@@ -116,11 +131,10 @@ describe('RelayerService', () => {
             'erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu',
         );
         // Mock returning 0
-        mockProvider.queryContract = vi.fn().mockResolvedValue({
-            returnData: [Buffer.from('0000000000000000', 'hex').toString('base64')]
-        });
+        mockController.query.mockResolvedValue([0n]);
         await expect(relayer.isAuthorized(sender)).resolves.toBe(false);
     });
+
     it('should sign and relay a transaction for registered agent', async () => {
         const mnemonic = Mnemonic.generate();
         const signer = new UserSigner(mnemonic.deriveKey(0));
@@ -216,8 +230,8 @@ describe('RelayerService', () => {
 
         // Mock being registered
         vi.spyOn(relayer, 'isAuthorized').mockResolvedValue(true);
-        // Mock simulation failure
-        mockProvider.simulateTransaction = vi.fn().mockResolvedValue({
+        // Mock simulation failure - DO NOT RE-ASSIGN mockProvider.simulateTransaction
+        (mockProvider.simulateTransaction as any).mockResolvedValue({
             execution: {
                 result: 'fail',
                 message: 'insufficient funds',

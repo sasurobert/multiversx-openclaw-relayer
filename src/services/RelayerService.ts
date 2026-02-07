@@ -2,10 +2,10 @@ import {
     Transaction,
     Address,
     TransactionComputer,
+    Abi,
+    DevnetEntrypoint,
     SmartContractQuery,
     SmartContractQueryResponse,
-    AbiRegistry,
-    ArgSerializer,
 } from '@multiversx/sdk-core';
 import { UserVerifier, UserPublicKey } from '@multiversx/sdk-wallet';
 import { QuotaManager } from './QuotaManager';
@@ -45,12 +45,13 @@ export interface IRelayerNetworkProvider {
 }
 
 export class RelayerService {
-    private provider: IRelayerNetworkProvider;
     private relayerAddressManager: RelayerAddressManager;
     private quotaManager: QuotaManager;
     private challengeManager: ChallengeManager;
     private registryAddresses: string[];
-    private identityAbi?: AbiRegistry;
+    private identityAbi?: Abi;
+    private entrypoint: DevnetEntrypoint;
+    private provider: IRelayerNetworkProvider;
 
     constructor(
         provider: IRelayerNetworkProvider,
@@ -58,12 +59,15 @@ export class RelayerService {
         quotaManager: QuotaManager,
         challengeManager: ChallengeManager,
         registryAddresses: string[] = [],
+        entrypoint?: DevnetEntrypoint
     ) {
         this.provider = provider;
         this.relayerAddressManager = relayerAddressManager;
         this.quotaManager = quotaManager;
         this.challengeManager = challengeManager;
         this.registryAddresses = registryAddresses;
+        // Optional entrypoint injection for testing/standardization
+        this.entrypoint = entrypoint || new DevnetEntrypoint({ url: (provider as any).url || 'http://localhost:7950' });
 
         this.initializeAbis();
     }
@@ -72,7 +76,7 @@ export class RelayerService {
         try {
             const abiPath = path.join(__dirname, '../abis/identity-registry.abi.json');
             if (fs.existsSync(abiPath)) {
-                this.identityAbi = AbiRegistry.create(JSON.parse(fs.readFileSync(abiPath, 'utf8')));
+                this.identityAbi = Abi.create(JSON.parse(fs.readFileSync(abiPath, 'utf8')));
             }
         } catch (error) {
             console.error('Failed to initialize ABIs in RelayerService:', error);
@@ -100,43 +104,25 @@ export class RelayerService {
     }
 
     async isAuthorized(address: Address): Promise<boolean> {
-        if (this.registryAddresses.length === 0) {
-            console.log('Authorization: No registries configured, failing open.');
+        if (this.registryAddresses.length === 0 || !this.identityAbi) {
+            console.log('Authorization: No registries or ABI configured, failing open.');
             return true;
         }
 
         const identityRegistry = this.registryAddresses[0];
-        console.log(
-            `Authorization: Checking registry ${identityRegistry} for ${address.toBech32()}`,
-        );
+        console.log(`Authorization: Checking registry ${identityRegistry} for ${address.toBech32()}`);
 
         try {
-            const query = new SmartContractQuery({
-                contract: new Address(identityRegistry),
+            const controller = this.entrypoint.createSmartContractController(this.identityAbi);
+
+            const results = await controller.query({
+                contract: Address.newFromBech32(identityRegistry),
                 function: 'get_agent_id',
-                arguments: [address.getPublicKey()],
+                arguments: [address],
             });
 
-            const queryResponse = await this.provider.queryContract(query);
-
-            if (this.identityAbi) {
-                const serializer = new ArgSerializer();
-                const values = serializer.buffersToValues(queryResponse.returnDataParts.map((p: any) => Buffer.from(p)), this.identityAbi.getEndpoint('get_agent_id').output);
-                const agentId = values[0]?.valueOf() || 0n;
-                console.log(`Authorization: Agent ID found (ABI-based): ${agentId.toString()}`);
-                return agentId > 0n;
-            }
-
-            // Fallback to legacy parsing if ABI is missing
-            const returnData = queryResponse.returnDataParts;
-            if (!returnData || returnData.length === 0) {
-                console.log(`Authorization: Registry returned no data for ${address.toBech32()}`);
-                return false;
-            }
-
-            const raw = Buffer.from(returnData[0]);
-            const agentId = raw.length > 0 ? BigInt('0x' + raw.toString('hex')) : 0n;
-            console.log(`Authorization: Agent ID found (legacy): ${agentId.toString()}`);
+            const agentId = results[0] as bigint;
+            console.log(`Authorization: Agent ID found (ABI-typed): ${agentId.toString()}`);
             return agentId > 0n;
         } catch (error) {
             console.error('Authorization: Agent registration check failed:', error);
