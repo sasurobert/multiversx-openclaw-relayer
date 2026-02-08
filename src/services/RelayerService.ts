@@ -197,38 +197,42 @@ export class RelayerService {
 
         // 5. Pre-broadcast Simulation (Crucial for Relayed V3)
         console.log('Relay: Step 4 - Running On-Chain Simulation');
-        try {
-            const simulationResult = await this.provider.simulateTransaction(tx);
-            console.log(
-                'Relay: Simulation raw result:',
-                JSON.stringify(simulationResult, (_, v) => typeof v === 'bigint' ? v.toString() : v),
-            );
+        if (process.env.SKIP_SIMULATION === 'true') {
+            console.log('Relay: Simulation SKIPPED by config.');
+        } else {
+            try {
+                const simulationResult = await this.provider.simulateTransaction(tx);
+                console.log(
+                    'Relay: Simulation raw result:',
+                    JSON.stringify(simulationResult, (_, v) => typeof v === 'bigint' ? v.toString() : v),
+                );
 
-            // Robust Parser: Handle both flattened (API) and nested (Proxy/Gateway) structures
-            const statusFromStatus = simulationResult?.status?.status;
-            const statusFromRaw = simulationResult?.raw?.status;
-            const execution =
-                simulationResult?.execution || simulationResult?.result?.execution;
+                // Robust Parser: Handle both flattened (API) and nested (Proxy/Gateway) structures
+                const statusFromStatus = simulationResult?.status?.status;
+                const statusFromRaw = simulationResult?.raw?.status;
+                const execution =
+                    simulationResult?.execution || simulationResult?.result?.execution;
 
-            // Check shard-specific status in raw if top-level status is missing
-            const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
-            const senderShardStatus = simulationResult?.raw?.senderShard?.status;
-            const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
+                // Check shard-specific status in raw if top-level status is missing
+                const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
+                const senderShardStatus = simulationResult?.raw?.senderShard?.status;
+                const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
 
-            const resultStatus =
-                statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
+                const resultStatus =
+                    statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
 
-            if (resultStatus !== 'success') {
-                const message =
-                    execution?.message || simulationResult?.error || 'Unknown error';
-                console.error(`Relay: Simulation failed: ${message}`);
-                throw new Error(`On-chain simulation failed: ${message}`);
+                if (resultStatus !== 'success') {
+                    const message =
+                        execution?.message || simulationResult?.error || 'Unknown error';
+                    console.error(`Relay: Simulation failed: ${message}`);
+                    throw new Error(`On-chain simulation failed: ${message}`);
+                }
+                console.log('Relay: Simulation successful.');
+            } catch (simError: unknown) {
+                const message = simError instanceof Error ? simError.message : String(simError);
+                console.error('Relay: Simulation error caught:', message);
+                throw simError;
             }
-            console.log('Relay: Simulation successful.');
-        } catch (simError: unknown) {
-            const message = simError instanceof Error ? simError.message : String(simError);
-            console.error('Relay: Simulation error caught:', message);
-            throw simError;
         }
 
         // 6. Broadcast
