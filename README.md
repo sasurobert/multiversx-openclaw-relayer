@@ -11,19 +11,23 @@ A secure, high-performance general relayer service for OpenClaw agents on Multiv
     - **Quota Management**: Rate limiting per agent to prevent gas draining.
     - **Signature Validation**: Strict verification of inner transaction signatures.
 
-## Getting Started
-
-### Prerequisites
-- Node.js >= 18
-- A MultiversX Wallet PEM file (`relayer.pem`) with funds for gas.
-
-### Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/sasurobert/multiversx-openclaw-relayer.git
 cd multiversx-openclaw-relayer
-npm install
+chmod +x setup.sh && ./setup.sh
 ```
+
+The setup script installs dependencies, creates a default `.env`, builds, and runs tests.
+
+### Prerequisites
+
+| Tool | Version | Required |
+|------|---------|----------|
+| Node.js | v18+ | Yes |
+| npm | v9+ | Yes |
+| `relayer.pem` | — | Yes (wallet with EGLD for gas) |
 
 ### Configuration
 
