@@ -16,6 +16,7 @@ export interface AppConfig {
   challengeDifficulty: number;
   quotaResetIntervalMs: number;
   challengeTtlSeconds: number;
+  logLevel: string;
 }
 
 export const config: AppConfig = {
@@ -32,4 +33,5 @@ export const config: AppConfig = {
   challengeDifficulty: parseInt(process.env.CHALLENGE_DIFFICULTY || '18', 10),
   quotaResetIntervalMs: 24 * 60 * 60 * 1000, // 24 hours
   challengeTtlSeconds: 60, // 1 minute
+  logLevel: process.env.LOG_LEVEL || 'info',
 };

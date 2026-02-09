@@ -5,12 +5,13 @@ import { config } from './config';
 import { QuotaManager } from './services/QuotaManager';
 import { ChallengeManager } from './services/ChallengeManager';
 import { RelayerService } from './services/RelayerService';
+import { logger } from './utils/logger';
 
 const main = async () => {
-  console.log('Starting MultiversX OpenClaw Relayer...');
-  console.log(
-    'Config:',
-    JSON.stringify({ ...config, relayerPemPath: '***' }, null, 2),
+  logger.info('Starting MultiversX OpenClaw Relayer...');
+  logger.info(
+    { config: { ...config, relayerPemPath: '***' } },
+    'Loaded configuration',
   );
 
   const url = config.networkProvider;
@@ -43,13 +44,13 @@ const main = async () => {
   const app = createApp(relayerService, challengeManager);
 
   app.listen(config.port, () => {
-    console.log(`Server listening on port ${config.port}`);
+    logger.info({ port: config.port }, 'Server listening');
   });
 };
 
 if (require.main === module) {
   main().catch(err => {
-    console.error('Fatal error:', err);
+    logger.fatal({ error: err }, 'Fatal error');
     process.exit(1);
   });
 }

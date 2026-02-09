@@ -3,6 +3,7 @@ import cors from 'cors';
 import { RelayerService } from '../services/RelayerService';
 import { ChallengeManager } from '../services/ChallengeManager';
 import { Transaction } from '@multiversx/sdk-core';
+import { logger } from '../utils/logger';
 
 export const createApp = (
   relayerService: RelayerService,
@@ -31,8 +32,9 @@ export const createApp = (
       const relayerAddress =
         relayerService.getRelayerAddressForUser(userAddress);
       res.status(200).json({ relayerAddress });
-    } catch (error: any) {
-      res.status(404).json({ error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      res.status(404).json({ error: message });
     }
   });
 
@@ -87,18 +89,20 @@ export const createApp = (
       let tx: Transaction;
       try {
         tx = Transaction.newFromPlainObject(transaction);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Invalid format';
         res
           .status(400)
-          .json({ error: 'Invalid transaction format', details: err.message });
+          .json({ error: 'Invalid transaction format', details: message });
         return;
       }
 
       const txHash = await relayerService.signAndRelay(tx, challengeNonce);
       res.status(200).json({ txHash });
-    } catch (error: any) {
-      console.error('Relay error:', error);
-      const message = error.message || 'Internal Server Error';
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error({ error: err.message }, 'Relay error');
+      const message = err.message || 'Internal Server Error';
 
       if (message.includes('Quota exceeded')) {
         res.status(429).json({ error: message });

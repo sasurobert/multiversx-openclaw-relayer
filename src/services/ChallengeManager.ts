@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import { config } from '../config.js';
+import { logger } from '../utils/logger';
 
 export interface Challenge {
   address: string;
@@ -51,13 +52,14 @@ export class ChallengeManager {
     const hash = createHash('sha256').update(data).digest(); // Get Buffer for bit checking
 
     if (!this.checkDifficulty(hash, challenge.difficulty)) {
-      console.warn(
-        `Challenge: Invalid solution for ${address}. Hash: ${hash.toString('hex')}`,
+      logger.warn(
+        { address, hash: hash.toString('hex') },
+        'Challenge: Invalid solution',
       );
       return false;
     }
 
-    console.log(`Challenge: Valid solution for ${address}.`);
+    logger.info({ address }, 'Challenge: Valid solution');
     this.challenges.delete(address); // One-time use
     return true;
   }

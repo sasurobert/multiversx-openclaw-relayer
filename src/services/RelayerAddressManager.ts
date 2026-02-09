@@ -2,6 +2,7 @@ import { UserSigner } from '@multiversx/sdk-wallet';
 import { Address } from '@multiversx/sdk-core';
 import fs from 'fs';
 import path from 'path';
+import { logger } from '../utils/logger';
 
 export class RelayerAddressManager {
   private signers: Map<number, UserSigner> = new Map();
@@ -13,7 +14,7 @@ export class RelayerAddressManager {
 
   private loadWallets(walletsDir: string) {
     if (!fs.existsSync(walletsDir)) {
-      console.warn(`Wallets directory ${walletsDir} does not exist.`);
+      logger.warn({ walletsDir }, 'Wallets directory does not exist');
       return;
     }
 
@@ -35,11 +36,12 @@ export class RelayerAddressManager {
 
           this.signers.set(shard, signer);
           this.addresses.set(shard, address.toBech32());
-          console.log(
-            `Loaded relayer wallet for shard ${shard}: ${address.toBech32()}`,
+          logger.info(
+            { shard, address: address.toBech32() },
+            'Loaded relayer wallet',
           );
         } catch (e) {
-          console.error(`Failed to load wallet ${file}:`, e);
+          logger.error({ file, error: e }, 'Failed to load wallet');
         }
       }
     }
