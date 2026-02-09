@@ -4,6 +4,8 @@ import { RelayerService } from '../services/RelayerService';
 import { ChallengeManager } from '../services/ChallengeManager';
 import { Transaction } from '@multiversx/sdk-core';
 import { logger } from '../utils/logger';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 export const createApp = (
   relayerService: RelayerService,
@@ -11,6 +13,13 @@ export const createApp = (
 ) => {
   const app = express();
 
+  app.use(helmet());
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
   app.use(cors());
   app.use(express.json());
 
