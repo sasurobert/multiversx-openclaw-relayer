@@ -76,7 +76,12 @@ export class RelayerService {
         try {
             const abiPath = path.join(__dirname, '../abis/identity-registry.abi.json');
             if (fs.existsSync(abiPath)) {
-                this.identityAbi = Abi.create(JSON.parse(fs.readFileSync(abiPath, 'utf8')));
+                // Patch ABI types that sdk-core TypeMapper doesn't recognize
+                const raw = fs.readFileSync(abiPath, 'utf8');
+                const patched = raw
+                    .replace(/"TokenId"/g, '"TokenIdentifier"')
+                    .replace(/"NonZeroBigUint"/g, '"BigUint"');
+                this.identityAbi = Abi.create(JSON.parse(patched));
             }
         } catch (error) {
             logger.error({ error }, 'Failed to initialize ABIs in RelayerService');
