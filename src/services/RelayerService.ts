@@ -10,6 +10,7 @@ import {
 import { UserVerifier, UserPublicKey } from '@multiversx/sdk-wallet';
 import { QuotaManager } from './QuotaManager';
 import { ChallengeManager } from './ChallengeManager';
+import { parseSimulationResult } from '../utils/simulationParser';
 import { RelayerAddressManager } from './RelayerAddressManager';
 import { logger } from '../utils/logger';
 import fs from 'fs';
@@ -209,23 +210,11 @@ export class RelayerService {
                     'Relay: Simulation raw result',
                 );
 
-                const statusFromStatus = simulationResult?.status?.status;
-                const statusFromRaw = simulationResult?.raw?.status;
-                const execution =
-                    simulationResult?.execution || simulationResult?.result?.execution;
+                const { success, errorMessage } = parseSimulationResult(simulationResult);
 
-                const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
-                const senderShardStatus = simulationResult?.raw?.senderShard?.status;
-                const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
-
-                const resultStatus =
-                    statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
-
-                if (resultStatus !== 'success') {
-                    const message =
-                        execution?.message || simulationResult?.error || 'Unknown error';
-                    logger.error({ error: message }, 'Relay: Simulation failed');
-                    throw new Error(`On-chain simulation failed: ${message}`);
+                if (!success) {
+                    logger.error({ error: errorMessage }, 'Relay: Simulation failed');
+                    throw new Error(`On-chain simulation failed: ${errorMessage}`);
                 }
                 logger.info('Relay: Simulation successful.');
             } catch (simError: unknown) {
